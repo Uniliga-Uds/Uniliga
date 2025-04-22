@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sportauswahl</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: #f4f6f9;
+      text-align: center;
+    }
+    .logo {
+      max-width: 300px;
+      margin: 0 auto 20px auto;
+      display: block;
+    }
+    .button-container {
+      display: inline-flex;   /* Buttons nebeneinander */
+      gap: 20px;              /* Abstand zwischen den Buttons */
+    }
+    .sport-option {
+      width: 180px;
+      height: 180px;
+      border: 2px solid #003366;
+      border-radius: 10px;
+      cursor: pointer;
+      transition: background 0.3s;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+    }
+    .sport-option:hover {
+      background: #e0e0e0;
+    }
+    .sport-option img {
+      max-width: 80px;
+      max-height: 80px;
+    }
+    .sport-option h2 {
+      margin-top: 10px;
+      font-size: 1.1rem;
+    }
+    
+    /* Zusätzliche Buttons für die Regelwerke */
+    .regelwerk-container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      margin-top: 40px;
+      align-items: center;
+    }
+    .regelwerk-option {
+      width: 300px;
+      height: 60px;
+      border: 2px solid #003366;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background 0.3s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #fff;
+    }
+    .regelwerk-option:hover {
+      background: #e0e0e0;
+    }
+    .regelwerk-option h2 {
+      font-size: 1.1rem;
+      margin: 0;
+    }
+  </style>
+</head>
+<body>
+  <h1>Wähle deine Sportart</h1>
+  
+  <!-- Hauptlogo (Campusliga) -->
+  <img src="Image.png" alt="Sportauswahl Logo" class="logo">
+  
+  <!-- Buttons für Volleyball & Fußball -->
+  <div class="button-container">
+    <div class="sport-option" onclick="window.location.href='volleyball.html'">
+      <img src="volleyball_button.png" alt="Volleyball">
+      <h2>Volleyball</h2>
+    </div>
+    <div class="sport-option" onclick="window.location.href='fussball.html'">
+      <img src="fussball_button.png" alt="Fußball">
+      <h2>Fußball</h2>
+    </div>
+  </div>
+  
+  <!-- Zusätzliche Buttons für Regelwerke (PDFs) -->
+  <div class="regelwerk-container">
+    <div class="regelwerk-option" onclick="window.open('regelwerk_fussball.pdf', '_blank')">
+      <h2>Regelwerk Fußball</h2>
+    </div>
+    <div class="regelwerk-option" onclick="window.open('regelwerk_volleyball.pdf', '_blank')">
+      <h2>Regelwerk Volleyball</h2>
+    </div>
+  </div>
+</body>
+</html>

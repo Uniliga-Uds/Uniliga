@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ligaplaner – Playoffs</title>
+  <style>
+    /* Basis-Styling */
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 2rem;
+      background: #f4f6f9;
+      min-height: 100vh;
+    }
+    
+    /* Kopfzeile und Navigation */
+    #header {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+    #logo {
+      margin-right: 20px;
+    }
+    #logo img {
+      max-width: 200px;
+      height: auto;
+    }
+    #navButtons {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    #navButtons button {
+      padding: 15px 30px;
+      font-size: 1.2rem;
+      background-color: #f2f2f2;
+      color: #333;
+      border: 1px solid #ccc;
+      border-radius: 0;
+      cursor: pointer;
+    }
+    #navButtons button:hover {
+      background-color: #e2e2e2;
+      border-color: #999;
+    }
+    
+    /* Spielplan-Tabelle */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+      background: white;
+    }
+    table th, table td {
+      border: 1px solid #ccc;
+      padding: 0.5rem;
+      text-align: center;
+    }
+    table th {
+      background-color: #003366;
+      color: white;
+    }
+    
+    /* Bracket-Bereich */
+    .bracket {
+      position: relative;
+      min-width: 1200px; /* Damit der gesamte Bracket sichtbar wird – mobile Nutzer können seitlich scrollen */
+      min-height: 500px;
+      margin: 1.5rem auto;
+      background: linear-gradient(135deg, #ffffff, #ececec);
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+      overflow: hidden;
+      padding: 20px 0;
+    }
+    /* Wrapper für den Bracket, um horizontales Scrollen zu ermöglichen */
+    #bracketWrapper {
+      overflow-x: auto;
+    }
+    
+    /* Match-Boxen */
+    .match {
+      position: absolute;
+      width: 150px;
+      height: 80px;
+      background: #f9f9f9;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 5px;
+    }
+    .match input {
+      width: 90%;
+      height: 28px;
+      margin: 2px 0;
+      text-align: center;
+      border: 1px solid #bbb;
+      border-radius: 3px;
+    }
+    
+    /* Verbindungslinien */
+    .connector {
+      position: absolute;
+      background: #333;
+    }
+    /* Positionsangaben für die einzelnen Match-Boxen */
+    .r1m1 { top: 40px;  left: 50px; }
+    .r1m2 { top: 140px; left: 50px; }
+    .r1m3 { top: 240px; left: 50px; }
+    .r1m4 { top: 340px; left: 50px; }
+    
+    .r2m1 { top: 60px;  left: 350px; }
+    .r2m2 { top: 160px; left: 350px; }
+    .r2m3 { top: 260px; left: 350px; }
+    .r2m4 { top: 360px; left: 350px; }
+    
+    .r3m1 { top: 110px; left: 650px; }
+    .r3m2 { top: 310px; left: 650px; }
+    
+    .r4m1 { top: 210px; left: 950px; }
+    
+    .conn-r1m1-r2m1-h { top: 80px;  left: 200px; width: 150px; height: 2px; }
+    .conn-r1m1-r2m1-v { top: 80px;  left: 350px; width: 2px; height: 20px; }
+    
+    .conn-r1m2-r2m2-h { top: 180px; left: 200px; width: 150px; height: 2px; }
+    .conn-r1m2-r2m2-v { top: 180px; left: 350px; width: 2px; height: 20px; }
+    
+    .conn-r1m3-r2m3-h { top: 280px; left: 200px; width: 150px; height: 2px; }
+    .conn-r1m3-r2m3-v { top: 280px; left: 350px; width: 2px; height: 20px; }
+    
+    .conn-r1m4-r2m4-h { top: 380px; left: 200px; width: 150px; height: 2px; }
+    .conn-r1m4-r2m4-v { top: 380px; left: 350px; width: 2px; height: 20px; }
+    
+    .conn-r2m1-r3m1-h { top: 100px; left: 500px; width: 150px; height: 2px; }
+    .conn-r2m1-r3m1-v { top: 100px; left: 650px; width: 2px; height: 50px; }
+    
+    .conn-r2m2-r3m1-h { top: 200px; left: 500px; width: 150px; height: 2px; }
+    .conn-r2m2-r3m1-v { top: 150px; left: 650px; width: 2px; height: 50px; }
+    
+    .conn-r2m3-r3m2-h { top: 300px; left: 500px; width: 150px; height: 2px; }
+    .conn-r2m3-r3m2-v { top: 300px; left: 650px; width: 2px; height: 50px; }
+    
+    .conn-r2m4-r3m2-h { top: 400px; left: 500px; width: 150px; height: 2px; }
+    .conn-r2m4-r3m2-v { top: 350px; left: 650px; width: 2px; height: 50px; }
+    
+    .conn-r3m1-r4m1-h { top: 150px; left: 800px; width: 150px; height: 2px; }
+    .conn-r3m1-r4m1-v { top: 150px; left: 950px; width: 2px; height: 100px; }
+    
+    .conn-r3m2-r4m1-h { top: 350px; left: 800px; width: 150px; height: 2px; }
+    .conn-r3m2-r4m1-v { top: 250px; left: 950px; width: 2px; height: 100px; }
+    
+    /* Admin-PIN-Bereich */
+    #adminArea {
+      text-align: right;
+      margin-top: 20px;
+    }
+    #adminArea input {
+      padding: 5px;
+      font-size: 1rem;
+      margin-right: 5px;
+    }
+    #adminArea button {
+      padding: 5px 10px;
+      font-size: 1rem;
+      background-color: #003366;
+      color: white;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #adminArea button:hover {
+      background-color: #0055aa;
+    }
+    
+    /* Responsive Anpassungen */
+    @media (max-width: 600px) {
+      #header {
+        flex-direction: column;
+        align-items: center;
+      }
+      #navButtons button {
+        font-size: 1rem;
+        padding: 10px 20px;
+      }
+      table th, table td {
+        font-size: 0.9rem;
+      }
+    }
+  </style>
+  <!-- Firebase-Skripte -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+</head>
+<body>
+  <!-- Kopfzeile mit Logo und Navigations-Buttons -->
+  <div id="header">
+    <div id="logo">
+      <img src="Image.png" alt="Campusliga Logo">
+    </div>
+    <div id="navButtons">
+      <button onclick="window.location.href='volleyball.html'">Vorrunde</button>
+      <button onclick="window.location.href='Hauptrunde.html'">Hauptrunde</button>
+      <button onclick="window.location.href='playoffs.html'">Playoffs</button>
+    </div>
+  </div>
+  
+  <!-- Tabelle: Spielplan -->
+  <table id="table1">
+    <thead>
+      <tr>
+        <th>Zeit</th>
+        <th>Feld 1</th>
+        <th>Feld 2</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>16:15 – 16:30</td>
+        <td>Spiel um Platz 15</td>
+        <td>Spiel um Platz 13</td>
+      </tr>
+      <tr>
+        <td>16:35 – 16:50</td>
+        <td>Vorrunde 1</td>
+        <td>Vorrunde 2</td>
+      </tr>
+      <tr>
+        <td>16:55 – 17:10</td>
+        <td>Vorrunde 3</td>
+        <td>Vorrunde 4</td>
+      </tr>
+      <tr>
+        <td>17:15 – 17:30</td>
+        <td>Viertelfinale 1</td>
+        <td>Viertelfinale 2</td>
+      </tr>
+      <tr>
+        <td>17:35 – 17:50</td>
+        <td>Viertelfinale 3</td>
+        <td>Viertelfinale 4</td>
+      </tr>
+      <tr>
+        <td>17:55 – 18:10</td>
+        <td>Halbfinale 1</td>
+        <td>Halbfinale 2</td>
+      </tr>
+      <tr>
+        <td>18:15 – 18:30</td>
+        <td>FINALE</td>
+        <td>---</td>
+      </tr>
+      <tr>
+        <td>18:35 – 18:50</td>
+        <td>---</td>
+        <td>---</td>
+      </tr>
+    </tbody>
+  </table>
+  
+  <!-- Bracket Wrapper für horizontales Scrollen auf mobilen Geräten -->
+  <div id="bracketWrapper">
+    <!-- Turnierbaum (Playoffs-Bracket) -->
+    <div id="playoffsContainer" class="bracket"></div>
+  </div>
+  
+  <!-- Admin-PIN-Bereich -->
+  <div id="adminArea">
+    <input type="password" id="adminPinInput" placeholder="Admin PIN">
+    <button onclick="pToggleAdmin()">Anmelden</button>
+    <button id="saveButton" onclick="pSaveAllPlayoffs()" style="display:none;">Speichern</button>
+  </div>
+  
+  <script>
+    // Firebase-Konfiguration für Playoffs
+    const pFirebaseConfig = {
+      apiKey: "AIzaSyAsneYTXmT7JDUewiJ09LUg1QSZK6Rj_8",
+      authDomain: "uni-liga.firebaseapp.com",
+      projectId: "uni-liga",
+      storageBucket: "uni-liga.appspot.com",
+      messagingSenderId: "196698710621",
+      appId: "1:196698710621:web:66d13babfc997bab5a3b4"
+    };
+    firebase.initializeApp(pFirebaseConfig);
+    const pDb = firebase.firestore();
+
+    // Initialisiere pPlayoffsData mit leeren Feldern, falls noch nichts gespeichert ist
+    let pPlayoffsData = {
+      rounds: [
+        { round: 1, matches: [
+            { team1: "", team2: "" },
+            { team1: "", team2: "" },
+            { team1: "", team2: "" },
+            { team1: "", team2: "" }
+        ]},
+        { round: 2, matches: [
+            { team1: "", team2: "" },
+            { team1: "", team2: "" },
+            { team1: "", team2: "" },
+            { team1: "", team2: "" }
+        ]},
+        { round: 3, matches: [
+            { team1: "", team2: "" },
+            { team1: "", team2: "" }
+        ]},
+        { round: 4, matches: [
+            { team1: "", team2: "" }
+        ]}
+      ]
+    };
+
+    let pAdminMode = false;
+
+    // Adminmodus schalten – bei korrektem PIN "3141"
+    function pToggleAdmin() {
+      const pin = document.getElementById("adminPinInput").value;
+      if (pin === "3141") {
+        pAdminMode = true;
+        document.getElementById("saveButton").style.display = "inline-block";
+        pRenderPlayoffs();
+      } else {
+        alert("Falscher PIN");
+      }
+    }
+
+    // Aktualisiert ein bestimmtes Matchfeld in pPlayoffsData
+    function pUpdateMatch(roundIndex, matchIndex, field, value) {
+      pPlayoffsData.rounds[roundIndex].matches[matchIndex][field] = value;
+      console.log(`Update: Runde ${roundIndex}, Match ${matchIndex}, ${field}: ${value}`);
+    }
+
+    // Speichert die Playoffs-Daten in Firebase Firestore
+    function pSaveAllPlayoffs() {
+      pDb.collection("p_metadata").doc("p_playoffs").set({ pPlayoffs: pPlayoffsData })
+        .then(() => {
+          alert("Playoffs-Daten erfolgreich gespeichert!");
+        })
+        .catch(error => {
+          console.error("Fehler beim Speichern der Playoffs-Daten:", error);
+          alert("Fehler beim Speichern der Daten.");
+        });
+    }
+
+    // Lädt die Playoffs-Daten aus Firestore und rendert dann den Turnierbaum
+    function pLoadAllPlayoffs() {
+      pDb.collection("p_metadata").doc("p_playoffs").get()
+        .then(doc => {
+          if (doc.exists) {
+            const data = doc.data();
+            if (data.pPlayoffs) {
+              pPlayoffsData = data.pPlayoffs;
+            }
+          }
+          pRenderPlayoffs();
+        })
+        .catch(error => {
+          console.error("Fehler beim Laden der Playoffs-Daten:", error);
+          pRenderPlayoffs();
+        });
+    }
+
+    // Rendert den Playoffs-Turnierbaum mit zufällig gemischten Teams – nur leere Felder werden mit default-Werten gefüllt
+    function pRenderPlayoffs() {
+      const container = document.getElementById("playoffsContainer");
+      container.innerHTML = "";
+
+      // Erstelle ein Array mit den 22 Teamnamen und mische es zufällig
+      let teams = [];
+      for (let i = 1; i <= 22; i++) {
+        teams.push("Team " + i);
+      }
+      for (let i = teams.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [teams[i], teams[j]] = [teams[j], teams[i]];
+      }
+
+      // Iteriere über die Matches und weise den Feldern zufällige Teams zu, wenn sie leer sind
+      pPlayoffsData.rounds.forEach((round, roundIndex) => {
+        round.matches.forEach((match, matchIndex) => {
+          if (!match.team1 || match.team1.trim() === "") {
+            match.team1 = teams.shift();
+          }
+          if (!match.team2 || match.team2.trim() === "") {
+            match.team2 = teams.shift();
+          }
+
+          let className = "";
+          if (round.round === 1) {
+            if (matchIndex === 0) className = "r1m1";
+            else if (matchIndex === 1) className = "r1m2";
+            else if (matchIndex === 2) className = "r1m3";
+            else if (matchIndex === 3) className = "r1m4";
+          } else if (round.round === 2) {
+            if (matchIndex === 0) className = "r2m1";
+            else if (matchIndex === 1) className = "r2m2";
+            else if (matchIndex === 2) className = "r2m3";
+            else if (matchIndex === 3) className = "r2m4";
+          } else if (round.round === 3) {
+            if (matchIndex === 0) className = "r3m1";
+            else if (matchIndex === 1) className = "r3m2";
+          } else if (round.round === 4) {
+            className = "r4m1";
+          }
+
+          const matchDiv = document.createElement("div");
+          matchDiv.className = "match " + className;
+
+          const input1 = document.createElement("input");
+          input1.type = "text";
+          input1.value = match.team1;
+          // Ist Adminmodus aktiv, so werden die Inputfelder editierbar
+          if (pAdminMode) {
+            input1.disabled = false;
+            input1.oninput = () => pUpdateMatch(roundIndex, matchIndex, "team1", input1.value);
+          } else {
+            input1.disabled = true;
+          }
+
+          const input2 = document.createElement("input");
+          input2.type = "text";
+          input2.value = match.team2;
+          if (pAdminMode) {
+            input2.disabled = false;
+            input2.oninput = () => pUpdateMatch(roundIndex, matchIndex, "team2", input2.value);
+          } else {
+            input2.disabled = true;
+          }
+
+          matchDiv.appendChild(input1);
+          matchDiv.appendChild(input2);
+          container.appendChild(matchDiv);
+        });
+      });
+
+      // Füge die statischen Verbindungslinien hinzu, ohne bereits gesetzte Inhalte zu überschreiben
+      const connectorHTML = `
+        <div class="connector conn-r1m1-r2m1-h"></div>
+        <div class="connector conn-r1m1-r2m1-v"></div>
+        <div class="connector conn-r1m2-r2m2-h"></div>
+        <div class="connector conn-r1m2-r2m2-v"></div>
+        <div class="connector conn-r1m3-r2m3-h"></div>
+        <div class="connector conn-r1m3-r2m3-v"></div>
+        <div class="connector conn-r1m4-r2m4-h"></div>
+        <div class="connector conn-r1m4-r2m4-v"></div>
+        <div class="connector conn-r2m1-r3m1-h"></div>
+        <div class="connector conn-r2m1-r3m1-v"></div>
+        <div class="connector conn-r2m2-r3m1-h"></div>
+        <div class="connector conn-r2m2-r3m1-v"></div>
+        <div class="connector conn-r2m3-r3m2-h"></div>
+        <div class="connector conn-r2m3-r3m2-v"></div>
+        <div class="connector conn-r2m4-r3m2-h"></div>
+        <div class="connector conn-r2m4-r3m2-v"></div>
+        <div class="connector conn-r3m1-r4m1-h"></div>
+        <div class="connector conn-r3m1-r4m1-v"></div>
+        <div class="connector conn-r3m2-r4m1-h"></div>
+        <div class="connector conn-r3m2-r4m1-v"></div>
+      `;
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = connectorHTML;
+      while (tempDiv.firstChild) {
+        container.appendChild(tempDiv.firstChild);
+      }
+    }
+
+    // Beim Laden der Seite werden die Playoffs-Daten geladen und der Turnierbaum gerendert
+    pLoadAllPlayoffs();
+  </script>
+</body>
+</html>

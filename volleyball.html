@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Ligaplaner – Turnier</title>
+    <style>
+      body {
+        font-family: sans-serif;
+        margin: 0;
+        padding: 2rem;
+        background: #f4f6f9;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 1rem 0;
+        background: white;
+      }
+      th, td {
+        border: 1px solid #ccc;
+        padding: 0.5rem;
+        text-align: center;
+      }
+      th { background-color: #003366; color: white; }
+      .highlight { background-color: orange; }
+      .result-input input { width: 40px; text-align: center; }
+      .hidden { display: none; }
+      #teamList input { margin: 2px; padding: 5px 10px; }
+      /* Header & Navigation */
+      #header { display: flex; align-items: center; justify-content: center; gap: 20px; }
+      #logo { display: inline-block; vertical-align: middle; }
+      #logo img { max-width: 200px; height: auto; }
+      #header button { padding: 12px 24px; font-size: 1.2rem; cursor: pointer; }
+      /* Hamburger-Menü und Sidebar */
+      #hamburgerIcon {
+        position: fixed; top: 10px; left: 20px;
+        font-size: 30px; cursor: pointer; z-index: 999;
+      }
+      #sidebar {
+        position: fixed; top: 0; left: -250px;
+        width: 250px; height: 100%;
+        background-color: #fff;
+        box-shadow: 2px 0 5px rgba(0,0,0,0.3);
+        padding: 10px; transition: left 0.3s ease; z-index: 1001;
+      }
+      #sidebar.open { left: 0; }
+      #sidebar h2 { margin-top: 0; }
+      #sidebar ul { list-style: none; padding: 0; }
+      #sidebar li { padding: 8px; cursor: pointer; border-bottom: 1px solid #ccc; }
+      #sidebar li:hover { background-color: #f0f0f0; }
+      .group-tables { display: flex; justify-content: space-between; gap: 1rem; }
+      #navigationControls { text-align: center; margin-bottom: 1rem; }
+      /* Pfeiltasten größer */
+      #navigationControls button {
+        font-size: 1.5rem;
+        padding: 0.5rem 1rem;
+        margin: 0 0.5rem;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Hamburger-Menü Icon -->
+    <div id="hamburgerIcon" onclick="vToggleSidebar()">&#9776;</div>
+    <!-- Sidebar -->
+    <div id="sidebar">
+      <span id="closeSidebar" onclick="vToggleSidebar()" style="cursor:pointer; float:right; font-size:30px;">&times;</span>
+      <h2>Teams</h2>
+      <ul id="sidebarList"></ul>
+      <button id="clearFilterButtonSidebar" onclick="vClearFilter()">Filter zurücksetzen</button>
+    </div>
+    <!-- Header -->
+    <div id="header">
+      <div id="logo">
+        <img src="Image.png" alt="Campusliga Logo" />
+      </div>
+      <div id="navigationButtons">
+        <button onclick="location.href='volleyball.html'">Vorrunde</button>
+        <button onclick="location.href='Hauptrunde.html'">Hauptrunde</button>
+        <button onclick="location.href='Playoffs.html'">Playoffs</button>
+      </div>
+    </div>
+    <!-- Versteckter Titel -->
+    <h1 style="display:none;">Ligaplaner – Turnier</h1>
+    <!-- Admin: Teams bearbeiten -->
+    <div id="teamList" class="hidden"></div>
+    <!-- Standings -->
+    <div id="standingsContainer"></div>
+    <!-- Navigation (Spieltage) -->
+    <div id="navigationControls">
+      <button onclick="vVorherigerSpieltag()">⬅️</button>
+      <span id="spieltagLabel">Spieltag 1</span>
+      <button onclick="vNaechsterSpieltag()">➡️</button>
+    </div>
+    <!-- Spieltagsansicht -->
+    <div id="spieltagContainer"></div>
+    <!-- Admin: PIN & Speichern -->
+    <div style="margin-top:2rem; text-align:center;">
+      <input type="password" id="adminPinInput" placeholder="Admin PIN" />
+      <button onclick="vToggleAdmin()">Anmelden</button>
+      <button id="saveButton" onclick="vSaveAllMatchdays()" style="display:none;">Speichern</button>
+    </div>
+    <!-- Firebase Scripts -->
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+    <script>
+      // Firebase-Konfiguration mit "v"-Variablen
+      const vFirebaseConfig = {
+        apiKey: "AIzaSyAsn...",  // bitte anpassen
+        authDomain: "uni-liga.firebaseapp.com",
+        projectId: "uni-liga",
+        storageBucket: "uni-liga.appspot.com",
+        messagingSenderId: "196698710621",
+        appId: "1:196698710621:web:66d13babfc997bab5a3b4"
+      };
+      firebase.initializeApp(vFirebaseConfig);
+      const vDb = firebase.firestore();
+
+      let vAdminMode = false;
+      let vCurrentMatchday = 0;
+      let vTeamMapping = {};
+
+      // Hilfsfunktion: Deutsches Datumsformat (dd.mm.yyyy)
+      function vFormatGermanDate(isoDate) {
+        if (!isoDate) return "-";
+        const parts = isoDate.split("-");
+        if (parts.length < 3) return isoDate;
+        return parts[2] + "." + parts[1] + "." + parts[0];
+      }
+
+      function vGenerateStandardTeams() {
+        let tmp = {};
+        for (let i = 1; i <= 8; i++) {
+          tmp["A" + i] = "Team A" + i;
+          tmp["B" + i] = "Team B" + i;
+        }
+        return tmp;
+      }
+
+      // Spieltage mit Datum
+      const vMatchdays = [
+        {
+          nummer: 1,
+          datum: "",
+          spiele: [
+            { zeit: "16:15 – 16:30", teamA: "A3", teamB: "A4", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:15 – 16:30", teamA: "A5", teamB: "A6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:35 – 16:50", teamA: "A3", teamB: "A5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:35 – 16:50", teamA: "A4", teamB: "A6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:55 – 17:10", teamA: "A1", teamB: "A2", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:55 – 17:10", teamA: "A7", teamB: "A8", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:15 – 17:30", teamA: "A1", teamB: "A3", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:15 – 17:30", teamA: "A7", teamB: "A5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:35 – 17:50", teamA: "A2", teamB: "A4", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:35 – 17:50", teamA: "A8", teamB: "A6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:55 – 18:10", teamA: "A4", teamB: "A1", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:55 – 18:10", teamA: "A6", teamB: "A7", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "18:15 – 18:30", teamA: "A3", teamB: "A2", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "18:15 – 18:30", teamA: "A8", teamB: "A5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" }
+          ]
+        },
+        {
+          nummer: 2,
+          datum: "",
+          spiele: [
+            { zeit: "16:15 – 16:30", teamA: "B3", teamB: "B4", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:15 – 16:30", teamA: "B5", teamB: "B6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:35 – 16:50", teamA: "B3", teamB: "B5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:35 – 16:50", teamA: "B4", teamB: "B6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:55 – 17:10", teamA: "B1", teamB: "B2", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:55 – 17:10", teamA: "B7", teamB: "B8", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:15 – 17:30", teamA: "B1", teamB: "B3", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:15 – 17:30", teamA: "B7", teamB: "B5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:35 – 17:50", teamA: "B2", teamB: "B4", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:35 – 17:50", teamA: "B8", teamB: "B6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:55 – 18:10", teamA: "B4", teamB: "B1", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:55 – 18:10", teamA: "B6", teamB: "B7", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "18:15 – 18:30", teamA: "B3", teamB: "B2", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "18:15 – 18:30", teamA: "B8", teamB: "B5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" }
+          ]
+        },
+        {
+          nummer: 3,
+          datum: "",
+          spiele: [
+            { zeit: "16:15 – 16:30", teamA: "A1", teamB: "A8", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:15 – 16:30", teamA: "A2", teamB: "A7", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:35 – 16:50", teamA: "A1", teamB: "A7", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:35 – 16:50", teamA: "A2", teamB: "A8", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:55 – 17:10", teamA: "A3", teamB: "A6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:55 – 17:10", teamA: "A4", teamB: "A5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:15 – 17:30", teamA: "A1", teamB: "A6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:15 – 17:30", teamA: "A2", teamB: "A5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:35 – 17:50", teamA: "A7", teamB: "A3", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:35 – 17:50", teamA: "A8", teamB: "A4", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:55 – 18:10", teamA: "A1", teamB: "A5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:55 – 18:10", teamA: "A2", teamB: "A6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "18:15 – 18:30", teamA: "A7", teamB: "A4", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "18:15 – 18:30", teamA: "A8", teamB: "A3", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" }
+          ]
+        },
+        {
+          nummer: 4,
+          datum: "",
+          spiele: [
+            { zeit: "16:15 – 16:30", teamA: "B1", teamB: "B8", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:15 – 16:30", teamA: "B2", teamB: "B7", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:35 – 16:50", teamA: "B1", teamB: "B7", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:35 – 16:50", teamA: "B2", teamB: "B8", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:55 – 17:10", teamA: "B3", teamB: "B6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "16:55 – 17:10", teamA: "B4", teamB: "B5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:15 – 17:30", teamA: "B1", teamB: "B6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:15 – 17:30", teamA: "B2", teamB: "B5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:35 – 17:50", teamA: "B7", teamB: "B3", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:35 – 17:50", teamA: "B8", teamB: "B4", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:55 – 18:10", teamA: "B1", teamB: "B5", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "17:55 – 18:10", teamA: "B2", teamB: "B6", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "18:15 – 18:30", teamA: "B7", teamB: "B4", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" },
+            { zeit: "18:15 – 18:30", teamA: "B8", teamB: "B3", goalsA: "", goalsB: "", feld: "Feld 1", schiedsrichter: "" }
+          ]
+        }
+      ];
+
+      function vSaveVTeamMapping() {
+        vDb.collection("v_metadata").doc("v_team_mapping").set({ vTeamMapping: vTeamMapping })
+          .then(() => console.log("V Team Mapping gespeichert"))
+          .catch(error => console.error("Fehler beim Speichern des V Team Mappings:", error));
+      }
+
+      function vSaveAllMatchdays() {
+        vDb.collection("v_metadata").doc("v_matchdays").set({ vMatchdays: vMatchdays })
+          .then(() => {
+            alert("Alle Spieltage (inkl. Datum) gespeichert!");
+            vRenderStandings();
+          })
+          .catch(error => console.error("Fehler beim Speichern der Spieltage:", error));
+      }
+
+      function vLoadAllMatchdays() {
+        vDb.collection("v_metadata").doc("v_matchdays").get()
+          .then(doc => {
+            if (doc.exists) {
+              let data = doc.data();
+              if (data.vMatchdays) {
+                vMatchdays.splice(0, vMatchdays.length, ...data.vMatchdays);
+              }
+            }
+            vRenderTeamList();
+            vRenderSidebarTeamList();
+            vRenderDefaultView();
+          })
+          .catch(error => {
+            console.error("Fehler beim Laden der v_matchdays:", error);
+            vRenderTeamList();
+            vRenderSidebarTeamList();
+            vRenderDefaultView();
+          });
+      }
+
+      function vToggleAdmin() {
+        const pin = document.getElementById("adminPinInput").value;
+        if (pin === "3141") {
+          vAdminMode = true;
+          document.getElementById("saveButton").style.display = "inline-block";
+        } else {
+          alert("Falscher PIN");
+        }
+        vRenderTeamList();
+        vRenderSidebarTeamList();
+        vRenderDefaultView();
+      }
+
+      function vRenderTeamList() {
+        const teamListDiv = document.getElementById("teamList");
+        if (vAdminMode) {
+          teamListDiv.classList.remove("hidden");
+          let aDiv = document.createElement("div");
+          aDiv.style.display = "inline-block";
+          aDiv.style.verticalAlign = "top";
+          aDiv.style.marginRight = "30px";
+          let bDiv = document.createElement("div");
+          bDiv.style.display = "inline-block";
+          bDiv.style.verticalAlign = "top";
+          aDiv.innerHTML = "<h2>Teams Gruppe A</h2>";
+          bDiv.innerHTML = "<h2>Teams Gruppe B</h2>";
+          for (const teamID in vTeamMapping) {
+            let container = document.createElement("div");
+            container.style.marginBottom = "5px";
+            if (teamID.startsWith("A")) {
+              container.innerHTML = `<label style="margin-right:10px;">${teamID}:</label>
+                <input type="text" value="${vTeamMapping[teamID]}" onchange="vTeamMapping['${teamID}'] = this.value; vSaveVTeamMapping(); vRenderTeamList(); vRenderSidebarTeamList(); vRenderDefaultView();" />`;
+              aDiv.appendChild(container);
+            } else if (teamID.startsWith("B")) {
+              container.innerHTML = `<label style="margin-right:10px;">${teamID}:</label>
+                <input type="text" value="${vTeamMapping[teamID]}" onchange="vTeamMapping['${teamID}'] = this.value; vSaveVTeamMapping(); vRenderTeamList(); vRenderSidebarTeamList(); vRenderDefaultView();" />`;
+              bDiv.appendChild(container);
+            }
+          }
+          teamListDiv.innerHTML = "";
+          teamListDiv.appendChild(aDiv);
+          teamListDiv.appendChild(bDiv);
+        } else {
+          teamListDiv.classList.add("hidden");
+        }
+      }
+
+      function vToggleSidebar() {
+        const sidebar = document.getElementById("sidebar");
+        sidebar.classList.toggle("open");
+        const hamburgerIcon = document.getElementById("hamburgerIcon");
+        hamburgerIcon.style.display = sidebar.classList.contains("open") ? "none" : "block";
+      }
+
+      function vRenderSidebarTeamList() {
+        const sidebarUl = document.getElementById("sidebarList");
+        sidebarUl.innerHTML = "";
+        for (const teamID in vTeamMapping) {
+          if (teamID.startsWith("A") || teamID.startsWith("B")) {
+            let li = document.createElement("li");
+            li.textContent = vTeamMapping[teamID];
+            li.style.cursor = "pointer";
+            li.onclick = function() {
+              let lis = sidebarUl.getElementsByTagName("li");
+              for (let item of lis) { item.classList.remove("highlight"); }
+              li.classList.add("highlight");
+              vRenderTeamSchedule(teamID);
+            };
+            sidebarUl.appendChild(li);
+          }
+        }
+      }
+
+      function vClearFilter() {
+        const sidebarUl = document.getElementById("sidebarList");
+        let lis = sidebarUl.getElementsByTagName("li");
+        for (let item of lis) { item.classList.remove("highlight"); }
+        document.getElementById("navigationControls").style.display = "block";
+        vRenderDefaultView();
+      }
+
+      function vRenderDefaultView() {
+        vRenderStandings();
+        vRenderMatchday();
+      }
+
+      function vComputeGroupStats(prefix) {
+        let stats = {};
+        for (const teamID in vTeamMapping) {
+          if (teamID.startsWith(prefix)) {
+            stats[teamID] = { games: 0, wins: 0, gf: 0, ga: 0 };
+          }
+        }
+        let relevantIndices = (prefix === "A") ? [0, 2] : [1, 3];
+        relevantIndices.forEach(idx => {
+          if (vMatchdays[idx] && vMatchdays[idx].spiele) {
+            vMatchdays[idx].spiele.forEach(match => {
+              let gA = parseInt(match.goalsA, 10);
+              let gB = parseInt(match.goalsB, 10);
+              if (!isNaN(gA) && !isNaN(gB)) {
+                if (match.teamA.startsWith(prefix)) {
+                  stats[match.teamA].games++;
+                  stats[match.teamA].gf += gA;
+                  stats[match.teamA].ga += gB;
+                  if (gA > gB) stats[match.teamA].wins++;
+                }
+                if (match.teamB.startsWith(prefix)) {
+                  stats[match.teamB].games++;
+                  stats[match.teamB].gf += gB;
+                  stats[match.teamB].ga += gA;
+                  if (gB > gA) stats[match.teamB].wins++;
+                }
+              }
+            });
+          }
+        });
+        let sorted = Object.entries(stats).sort((a, b) => {
+          let winsA = a[1].wins, winsB = b[1].wins;
+          if (winsB !== winsA) return winsB - winsA;
+          let diffA = a[1].gf - a[1].ga;
+          let diffB = b[1].gf - b[1].ga;
+          return diffB - diffA;
+        });
+        return sorted;
+      }
+
+      function vCreateStandingsTable(sortedStats, groupLabel) {
+        let table = document.createElement("table");
+        let caption = document.createElement("caption");
+        caption.textContent = groupLabel;
+        table.appendChild(caption);
+        let thead = document.createElement("thead");
+        thead.innerHTML = `
+          <tr>
+            <th>Team</th>
+            <th>Spiele</th>
+            <th>Siege</th>
+            <th>Punkte</th>
+          </tr>
+        `;
+        table.appendChild(thead);
+        let tbody = document.createElement("tbody");
+        sortedStats.forEach(([teamID, stat]) => {
+          let points = `${stat.gf} : ${stat.ga}`;
+          let row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${vTeamMapping[teamID]}</td>
+            <td>${stat.games}</td>
+            <td>${stat.wins}</td>
+            <td>${points}</td>
+          `;
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        return table;
+      }
+
+      function vRenderStandings() {
+        const container = document.getElementById("standingsContainer");
+        container.innerHTML = "";
+        let standingsA = vComputeGroupStats("A");
+        let standingsB = vComputeGroupStats("B");
+        let tableA = vCreateStandingsTable(standingsA, "Gruppe A");
+        let tableB = vCreateStandingsTable(standingsB, "Gruppe B");
+        const wrapper = document.createElement("div");
+        wrapper.className = "group-tables";
+        wrapper.appendChild(tableA);
+        wrapper.appendChild(tableB);
+        container.appendChild(wrapper);
+      }
+
+      function vRenderMatchday() {
+        const container = document.getElementById("spieltagContainer");
+        container.innerHTML = "";
+        let currentMD = vMatchdays[vCurrentMatchday];
+        // Datum anzeigen – im Adminmodus als Date‑Input, ansonsten im deutschen Format
+        let datumDiv = document.createElement("div");
+        if (vAdminMode) {
+          datumDiv.innerHTML = 'Datum: <input type="date" value="'+currentMD.datum+'" onchange="vUpdateDatum('+vCurrentMatchday+', this.value)">';
+        } else {
+          datumDiv.innerHTML = 'Datum: ' + vFormatGermanDate(currentMD.datum);
+        }
+        container.appendChild(datumDiv);
+        // Spieltagstabelle
+        let table = document.createElement("table");
+        let caption = document.createElement("caption");
+        caption.textContent = "Spieltag " + currentMD.nummer;
+        table.appendChild(caption);
+        let thead = document.createElement("thead");
+        thead.innerHTML = "<tr><th>Feld</th><th>Zeit</th><th>Team A</th><th>Team B</th><th>Ergebnis</th><th>Schiedsrichter</th></tr>";
+        table.appendChild(thead);
+        let tbody = document.createElement("tbody");
+        const fixtures = currentMD.spiele || [];
+        fixtures.forEach((match, index) => {
+          let row = document.createElement("tr");
+          let feldCell = "";
+          if (vAdminMode) {
+            feldCell = `<select onchange="vUpdateGame(${vCurrentMatchday}, ${index}, 'feld', this.value)">
+                          <option value="Feld 1" ${match.feld === "Feld 1" ? "selected" : ""}>Feld 1</option>
+                          <option value="Feld 2" ${match.feld === "Feld 2" ? "selected" : ""}>Feld 2</option>
+                        </select>`;
+          } else {
+            feldCell = match.feld ? match.feld : "Feld 1";
+          }
+          let teamAName = vTeamMapping[match.teamA] || match.teamA;
+          let teamBName = vTeamMapping[match.teamB] || match.teamB;
+          let ergebnis = "-";
+          if (vAdminMode) {
+            ergebnis = `<div class="result-input">
+                          <input type="number" min="0" value="${match.goalsA}" onchange="vUpdateGame(${vCurrentMatchday}, ${index}, 'goalsA', this.value)" />
+                          <span>:</span>
+                          <input type="number" min="0" value="${match.goalsB}" onchange="vUpdateGame(${vCurrentMatchday}, ${index}, 'goalsB', this.value)" />
+                        </div>`;
+          } else if (match.goalsA !== "" && match.goalsB !== "") {
+            ergebnis = match.goalsA + " : " + match.goalsB;
+          }
+          let schiedsrichterCell = "";
+          if (vAdminMode) {
+            let options = "<option value=''>-- wählen --</option>";
+            for (const key in vTeamMapping) {
+              if (key.startsWith("A") || key.startsWith("B")) {
+                let selected = (match.schiedsrichter === key) ? "selected" : "";
+                options += `<option value="${key}" ${selected}>${vTeamMapping[key]}</option>`;
+              }
+            }
+            schiedsrichterCell = `<select onchange="vUpdateGame(${vCurrentMatchday}, ${index}, 'schiedsrichter', this.value)">
+                                    ${options}
+                                  </select>`;
+          } else {
+            schiedsrichterCell = match.schiedsrichter ? vTeamMapping[match.schiedsrichter] : "";
+          }
+          row.innerHTML = `
+            <td>${feldCell}</td>
+            <td>${match.zeit}</td>
+            <td>${teamAName}</td>
+            <td>${teamBName}</td>
+            <td>${ergebnis}</td>
+            <td>${schiedsrichterCell}</td>
+          `;
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        container.appendChild(table);
+      }
+
+      function vUpdateDatum(matchdayIndex, value) {
+        vMatchdays[matchdayIndex].datum = value;
+      }
+
+      function vUpdateGame(matchdayIndex, matchIndex, field, value) {
+        if (vMatchdays[matchdayIndex].spiele) {
+          vMatchdays[matchdayIndex].spiele[matchIndex][field] = value;
+        }
+      }
+
+      function vVorherigerSpieltag() {
+        if (vCurrentMatchday > 0) {
+          vCurrentMatchday--;
+          document.getElementById("spieltagLabel").textContent = "Spieltag " + vMatchdays[vCurrentMatchday].nummer;
+          vRenderMatchday();
+        }
+      }
+
+      function vNaechsterSpieltag() {
+        if (vCurrentMatchday < vMatchdays.length - 1) {
+          vCurrentMatchday++;
+          document.getElementById("spieltagLabel").textContent = "Spieltag " + vMatchdays[vCurrentMatchday].nummer;
+          vRenderMatchday();
+        }
+      }
+
+      function vRenderTeamSchedule(teamID) {
+        document.getElementById("navigationControls").style.display = "none";
+        const standingsContainer = document.getElementById("standingsContainer");
+        let cells = standingsContainer.getElementsByTagName("td");
+        for (let cell of cells) {
+          if (cell.innerText === vTeamMapping[teamID]) {
+            cell.style.backgroundColor = "orange";
+          } else {
+            cell.style.backgroundColor = "";
+          }
+        }
+        const container = document.getElementById("spieltagContainer");
+        container.innerHTML = "";
+        let header = document.createElement("h2");
+        header.textContent = "Spiele von " + vTeamMapping[teamID];
+        container.appendChild(header);
+        let matches = [];
+        vMatchdays.forEach(tag => {
+          if (tag.spiele) {
+            tag.spiele.forEach(match => {
+              if (match.teamA === teamID || match.teamB === teamID) {
+                matches.push({
+                  spieltag: tag.nummer,
+                  zeit: match.zeit,
+                  teamA: match.teamA,
+                  teamB: match.teamB,
+                  goalsA: match.goalsA,
+                  goalsB: match.goalsB,
+                  feld: match.feld,
+                  schiedsrichter: match.schiedsrichter
+                });
+              }
+            });
+          }
+        });
+        if (matches.length === 0) {
+          let p = document.createElement("p");
+          p.textContent = "Keine Spiele gefunden.";
+          container.appendChild(p);
+          return;
+        }
+        let table = document.createElement("table");
+        let thead = document.createElement("thead");
+        thead.innerHTML = "<tr><th>Spieltag</th><th>Zeit</th><th>Team A</th><th>Team B</th><th>Ergebnis</th><th>Feld</th><th>Schiedsrichter</th></tr>";
+        table.appendChild(thead);
+        let tbody = document.createElement("tbody");
+        matches.forEach(m => {
+          let erg = "-";
+          if (m.goalsA !== "" && m.goalsB !== "") { erg = m.goalsA + " : " + m.goalsB; }
+          let row = document.createElement("tr");
+          row.innerHTML = `
+            <td>${m.spieltag}</td>
+            <td>${m.zeit}</td>
+            <td>${vTeamMapping[m.teamA] || m.teamA}</td>
+            <td>${vTeamMapping[m.teamB] || m.teamB}</td>
+            <td>${erg}</td>
+            <td>${m.feld || "Feld 1"}</td>
+            <td>${m.schiedsrichter ? vTeamMapping[m.schiedsrichter] : ""}</td>
+          `;
+          tbody.appendChild(row);
+        });
+        table.appendChild(tbody);
+        container.appendChild(table);
+      }
+
+      // Falls noch kein Mapping vorhanden ist, Standardteams setzen
+      if (Object.keys(vTeamMapping).length === 0) {
+        vTeamMapping = vGenerateStandardTeams();
+        vSaveVTeamMapping();
+      }
+      // Lade Spieltage (inkl. Datum) aus Firebase
+      vLoadAllMatchdays();
+    </script>
+  </body>
+</html>
